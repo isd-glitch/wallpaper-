@@ -1,10 +1,10 @@
 {
-  "name": "動く壁紙",
-  "short_name": "壁紙",
+  "name": "Live Rainbow Wallpaper",
+  "short_name": "Wallpaper",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#111111",
+  "theme_color": "#111111",
   "icons": [
     {
       "src": "icon.png",
