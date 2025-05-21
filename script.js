@@ -1,4 +1,4 @@
-// 一貫性と接続感のある美しいパーティクルシステム
+// 一貫性と接続感のある美しいパーティクルシステム（ラグ軽減・反射対応）
 const canvas = document.getElementById("rainbowCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -14,7 +14,7 @@ window.addEventListener("resize", () => {
 });
 
 document.addEventListener("mousemove", (e) => {
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     particles.push(new Particle(e.clientX, e.clientY));
   }
 });
@@ -35,6 +35,17 @@ class Particle {
   update() {
     this.x += this.velocity.x;
     this.y += this.velocity.y;
+
+    // 壁反射（物理的反応）
+    if (this.x - this.radius <= 0 || this.x + this.radius >= canvas.width) {
+      this.velocity.x *= -1;
+      this.x = Math.max(this.radius, Math.min(this.x, canvas.width - this.radius));
+    }
+    if (this.y - this.radius <= 0 || this.y + this.radius >= canvas.height) {
+      this.velocity.y *= -1;
+      this.y = Math.max(this.radius, Math.min(this.y, canvas.height - this.radius));
+    }
+
     this.opacity *= 0.98;
   }
 
@@ -55,9 +66,9 @@ function connectParticles() {
       const dx = particles[i].x - particles[j].x;
       const dy = particles[i].y - particles[j].y;
       const dist = Math.hypot(dx, dy);
-      if (dist < 120) {
-        ctx.strokeStyle = `hsla(${hue}, 100%, 80%, ${1 - dist / 120})`;
-        ctx.lineWidth = 1.2;
+      if (dist < 100) {
+        ctx.strokeStyle = `hsla(${hue}, 100%, 80%, ${1 - dist / 100})`;
+        ctx.lineWidth = 1.0;
         ctx.beginPath();
         ctx.moveTo(particles[i].x, particles[i].y);
         ctx.lineTo(particles[j].x, particles[j].y);
@@ -75,10 +86,15 @@ function animate() {
   particles.forEach((p, i) => {
     p.update();
     p.draw(ctx);
-    if (p.opacity < 0.01) particles.splice(i, 1);
   });
 
   connectParticles();
+
+  // パフォーマンス維持のため粒子上限
+  if (particles.length > 400) {
+    particles.splice(0, particles.length - 400);
+  }
+
   requestAnimationFrame(animate);
 }
 
