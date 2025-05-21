@@ -3,37 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="manifest" href="manifest.json">
-  <title>動く壁紙</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      height: 100%;
-      width: 100%;
-      background: black;
-    }
-    video {
-      position: fixed;
-      top: 0;
-      left: 0;
-      min-width: 100%;
-      min-height: 100%;
-      object-fit: cover;
-      z-index: -1;
-    }
-  </style>
+  <meta name="theme-color" content="#111111" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Live Wallpaper</title>
 </head>
 <body>
-  <video autoplay muted loop playsinline>
-    <source src="background.mp4" type="video/mp4">
-    お使いのブラウザでは動画を再生できません。
-  </video>
-  <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js');
-  }
-</script>
+  <canvas id="rainbowCanvas"></canvas>
+  <script src="script.js"></script>
 </body>
 </html>
