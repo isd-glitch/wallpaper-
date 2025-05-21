@@ -1,4 +1,4 @@
-// WebGL版：高パフォーマンスで美しく滑らかな接続型パーティクルエフェクト（光・反射・尾・バウンド）
+// WebGL版：高パフォーマンスで美しく滑らかな接続型パーティクルエフェクト + ライン接続 + 波紋 + バウンド + 反射
 import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
 
 const scene = new THREE.Scene();
@@ -37,8 +37,7 @@ particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 const shaderMaterial = new THREE.ShaderMaterial({
   uniforms: {
     pointTexture: { value: new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/circle.png') },
-    uTime: { value: 0.0 },
-    uHue: { value: 0.0 }
+    uTime: { value: 0.0 }
   },
   vertexShader: `
     attribute float size;
@@ -66,6 +65,15 @@ const shaderMaterial = new THREE.ShaderMaterial({
 const pointCloud = new THREE.Points(particles, shaderMaterial);
 scene.add(pointCloud);
 
+// 接続ライン
+const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+const lineGeometry = new THREE.BufferGeometry();
+const maxConnections = 1500;
+const linePositions = new Float32Array(maxConnections * 3);
+lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+const linesMesh = new THREE.LineSegments(lineGeometry, lineMaterial);
+scene.add(linesMesh);
+
 let mouse = { x: 0, y: 0 };
 window.addEventListener('mousemove', (e) => {
   mouse.x = e.clientX - window.innerWidth / 2;
@@ -74,8 +82,9 @@ window.addEventListener('mousemove', (e) => {
 
 function animate() {
   shaderMaterial.uniforms.uTime.value += 0.01;
-
   const pos = particles.attributes.position.array;
+  let lineIndex = 0;
+
   for (let i = 0; i < particleCount; i++) {
     let x = pos[i * 3];
     let y = pos[i * 3 + 1];
@@ -90,10 +99,27 @@ function animate() {
 
     pos[i * 3] = x;
     pos[i * 3 + 1] = y;
+
+    for (let j = i + 1; j < particleCount; j++) {
+      let dx = pos[i * 3] - pos[j * 3];
+      let dy = pos[i * 3 + 1] - pos[j * 3 + 1];
+      let dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 100 && lineIndex < maxConnections * 3) {
+        linePositions[lineIndex++] = pos[i * 3];
+        linePositions[lineIndex++] = pos[i * 3 + 1];
+        linePositions[lineIndex++] = pos[i * 3 + 2];
+        linePositions[lineIndex++] = pos[j * 3];
+        linePositions[lineIndex++] = pos[j * 3 + 1];
+        linePositions[lineIndex++] = pos[j * 3 + 2];
+      }
+    }
   }
+  for (; lineIndex < maxConnections * 3; lineIndex++) {
+    linePositions[lineIndex] = 0;
+  }
+  lineGeometry.attributes.position.needsUpdate = true;
   particles.attributes.position.needsUpdate = true;
 
-  pointCloud.rotation.y += 0.001;
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
