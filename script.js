@@ -1,109 +1,100 @@
-// 一貫性と接続感のある美しいパーティクルシステム（ラグ軽減・反射対応・動的サイズと速度・グラデーション尾・グロー）
-const canvas = document.getElementById("rainbowCanvas");
-const ctx = canvas.getContext("2d");
+// WebGL版：高パフォーマンスで美しく滑らかな接続型パーティクルエフェクト（光・反射・尾・バウンド）
+import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ alpha: true });
+document.body.appendChild(renderer.domElement);
 
-let particles = [];
-let hue = 0;
-let lastMouse = { x: 0, y: 0, time: Date.now() };
+renderer.setSize(window.innerWidth, window.innerHeight);
+camera.position.z = 100;
 
 window.addEventListener("resize", () => {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-document.addEventListener("mousemove", (e) => {
-  const dx = e.clientX - lastMouse.x;
-  const dy = e.clientY - lastMouse.y;
-  const dt = Date.now() - lastMouse.time;
-  const speed = Math.sqrt(dx * dx + dy * dy) / dt * 10;
+const particleCount = 350;
+const particles = new THREE.BufferGeometry();
+const positions = new Float32Array(particleCount * 3);
+const velocities = new Float32Array(particleCount * 3);
+const sizes = new Float32Array(particleCount);
 
-  for (let i = 0; i < 3; i++) {
-    particles.push(new Particle(e.clientX, e.clientY, speed));
-  }
+for (let i = 0; i < particleCount; i++) {
+  positions[i * 3] = (Math.random() - 0.5) * window.innerWidth;
+  positions[i * 3 + 1] = (Math.random() - 0.5) * window.innerHeight;
+  positions[i * 3 + 2] = 0;
+  velocities[i * 3] = (Math.random() - 0.5) * 1;
+  velocities[i * 3 + 1] = (Math.random() - 0.5) * 1;
+  velocities[i * 3 + 2] = 0;
+  sizes[i] = Math.random() * 3 + 1;
+}
 
-  lastMouse = { x: e.clientX, y: e.clientY, time: Date.now() };
+particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+const shaderMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    pointTexture: { value: new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/circle.png') },
+    uTime: { value: 0.0 },
+    uHue: { value: 0.0 }
+  },
+  vertexShader: `
+    attribute float size;
+    varying float vHue;
+    void main() {
+      vHue = mod(position.x + position.y, 360.0);
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = size * (300.0 / -mvPosition.z);
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D pointTexture;
+    varying float vHue;
+    void main() {
+      vec3 color = vec3(0.5 + 0.5 * cos(vHue * 0.05 + vec3(0.0, 2.0, 4.0)));
+      gl_FragColor = vec4(color, 1.0) * texture2D(pointTexture, gl_PointCoord);
+    }
+  `,
+  blending: THREE.AdditiveBlending,
+  depthTest: false,
+  transparent: true
 });
 
-class Particle {
-  constructor(x, y, speed = 1) {
-    this.x = x;
-    this.y = y;
-    this.radius = Math.max(0.5, Math.min(2, speed * 0.6)) + Math.random() * 0.5;
-    this.color = `hsl(${hue}, 100%, 70%)`;
-    this.opacity = 1;
-    this.velocity = {
-      x: (Math.random() - 0.5) * speed,
-      y: (Math.random() - 0.5) * speed,
-    };
-  }
+const pointCloud = new THREE.Points(particles, shaderMaterial);
+scene.add(pointCloud);
 
-  update() {
-    this.x += this.velocity.x;
-    this.y += this.velocity.y;
-
-    if (this.x - this.radius <= 0 || this.x + this.radius >= canvas.width) {
-      this.velocity.x *= -1;
-      this.x = Math.max(this.radius, Math.min(this.x, canvas.width - this.radius));
-    }
-    if (this.y - this.radius <= 0 || this.y + this.radius >= canvas.height) {
-      this.velocity.y *= -1;
-      this.y = Math.max(this.radius, Math.min(this.y, canvas.height - this.radius));
-    }
-
-    this.opacity *= 0.96;
-  }
-
-  draw(ctx) {
-    ctx.save();
-    ctx.globalAlpha = this.opacity;
-    const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 4);
-    gradient.addColorStop(0, this.color);
-    gradient.addColorStop(1, "transparent");
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius * 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-}
-
-function connectParticles() {
-  for (let i = 0; i < particles.length; i++) {
-    for (let j = i + 1; j < particles.length; j++) {
-      const dx = particles[i].x - particles[j].x;
-      const dy = particles[i].y - particles[j].y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < 100) {
-        ctx.strokeStyle = `hsla(${hue}, 100%, 80%, ${1 - dist / 100})`;
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(particles[i].x, particles[i].y);
-        ctx.lineTo(particles[j].x, particles[j].y);
-        ctx.stroke();
-      }
-    }
-  }
-}
+let mouse = { x: 0, y: 0 };
+window.addEventListener('mousemove', (e) => {
+  mouse.x = e.clientX - window.innerWidth / 2;
+  mouse.y = -(e.clientY - window.innerHeight / 2);
+});
 
 function animate() {
-  ctx.fillStyle = "rgba(10, 10, 20, 0.1)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  hue = (hue + 1) % 360;
+  shaderMaterial.uniforms.uTime.value += 0.01;
 
-  particles.forEach((p) => {
-    p.update();
-    p.draw(ctx);
-  });
+  const pos = particles.attributes.position.array;
+  for (let i = 0; i < particleCount; i++) {
+    let x = pos[i * 3];
+    let y = pos[i * 3 + 1];
+    let vx = velocities[i * 3];
+    let vy = velocities[i * 3 + 1];
 
-  connectParticles();
+    x += vx;
+    y += vy;
 
-  if (particles.length > 350) {
-    particles.splice(0, particles.length - 350);
+    if (x < -window.innerWidth / 2 || x > window.innerWidth / 2) velocities[i * 3] *= -1;
+    if (y < -window.innerHeight / 2 || y > window.innerHeight / 2) velocities[i * 3 + 1] *= -1;
+
+    pos[i * 3] = x;
+    pos[i * 3 + 1] = y;
   }
+  particles.attributes.position.needsUpdate = true;
 
+  pointCloud.rotation.y += 0.001;
+  renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
 
