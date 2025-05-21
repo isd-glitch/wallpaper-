@@ -1,4 +1,4 @@
-// 一貫性と接続感のある美しいパーティクルシステム（ラグ軽減・反射対応）
+// 一貫性と接続感のある美しいパーティクルシステム（ラグ軽減・反射対応・動的サイズと速度・グラデーション尾・グロー）
 const canvas = document.getElementById("rainbowCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -7,6 +7,7 @@ canvas.height = window.innerHeight;
 
 let particles = [];
 let hue = 0;
+let lastMouse = { x: 0, y: 0, time: Date.now() };
 
 window.addEventListener("resize", () => {
   canvas.width = window.innerWidth;
@@ -14,21 +15,28 @@ window.addEventListener("resize", () => {
 });
 
 document.addEventListener("mousemove", (e) => {
+  const dx = e.clientX - lastMouse.x;
+  const dy = e.clientY - lastMouse.y;
+  const dt = Date.now() - lastMouse.time;
+  const speed = Math.sqrt(dx * dx + dy * dy) / dt * 10;
+
   for (let i = 0; i < 3; i++) {
-    particles.push(new Particle(e.clientX, e.clientY));
+    particles.push(new Particle(e.clientX, e.clientY, speed));
   }
+
+  lastMouse = { x: e.clientX, y: e.clientY, time: Date.now() };
 });
 
 class Particle {
-  constructor(x, y) {
+  constructor(x, y, speed = 1) {
     this.x = x;
     this.y = y;
-    this.radius = Math.random() * 4 + 2;
+    this.radius = Math.max(0.5, Math.min(2, speed * 0.6)) + Math.random() * 0.5;
     this.color = `hsl(${hue}, 100%, 70%)`;
     this.opacity = 1;
     this.velocity = {
-      x: (Math.random() - 0.5) * 2,
-      y: (Math.random() - 0.5) * 2,
+      x: (Math.random() - 0.5) * speed,
+      y: (Math.random() - 0.5) * speed,
     };
   }
 
@@ -36,7 +44,6 @@ class Particle {
     this.x += this.velocity.x;
     this.y += this.velocity.y;
 
-    // 壁反射（物理的反応）
     if (this.x - this.radius <= 0 || this.x + this.radius >= canvas.width) {
       this.velocity.x *= -1;
       this.x = Math.max(this.radius, Math.min(this.x, canvas.width - this.radius));
@@ -46,15 +53,18 @@ class Particle {
       this.y = Math.max(this.radius, Math.min(this.y, canvas.height - this.radius));
     }
 
-    this.opacity *= 0.98;
+    this.opacity *= 0.96;
   }
 
   draw(ctx) {
     ctx.save();
     ctx.globalAlpha = this.opacity;
-    ctx.fillStyle = this.color;
+    const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 4);
+    gradient.addColorStop(0, this.color);
+    gradient.addColorStop(1, "transparent");
+    ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.arc(this.x, this.y, this.radius * 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -68,7 +78,7 @@ function connectParticles() {
       const dist = Math.hypot(dx, dy);
       if (dist < 100) {
         ctx.strokeStyle = `hsla(${hue}, 100%, 80%, ${1 - dist / 100})`;
-        ctx.lineWidth = 1.0;
+        ctx.lineWidth = 0.5;
         ctx.beginPath();
         ctx.moveTo(particles[i].x, particles[i].y);
         ctx.lineTo(particles[j].x, particles[j].y);
@@ -83,16 +93,15 @@ function animate() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   hue = (hue + 1) % 360;
 
-  particles.forEach((p, i) => {
+  particles.forEach((p) => {
     p.update();
     p.draw(ctx);
   });
 
   connectParticles();
 
-  // パフォーマンス維持のため粒子上限
-  if (particles.length > 400) {
-    particles.splice(0, particles.length - 400);
+  if (particles.length > 350) {
+    particles.splice(0, particles.length - 350);
   }
 
   requestAnimationFrame(animate);
