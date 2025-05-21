@@ -1,46 +1,48 @@
-// WebGL版：高パフォーマンスで美しく滑らかな接続型パーティクルエフェクト + ライン接続 + 波紋 + バウンド + 反射 + 波動伝播
 import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
+camera.position.z = 50;
+
 const renderer = new THREE.WebGLRenderer({ alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000000, 0); // 完全に透明
 document.body.appendChild(renderer.domElement);
 
-renderer.setSize(window.innerWidth, window.innerHeight);
-camera.position.z = 100;
-
-window.addEventListener("resize", () => {
+window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-const particleCount = 350;
-const particles = new THREE.BufferGeometry();
+// === パーティクル設定 ===
+const particleCount = 300;
+const geometry = new THREE.BufferGeometry();
 const positions = new Float32Array(particleCount * 3);
 const velocities = new Float32Array(particleCount * 3);
 const sizes = new Float32Array(particleCount);
 const ripples = new Float32Array(particleCount);
 
 for (let i = 0; i < particleCount; i++) {
-  positions[i * 3] = (Math.random() - 0.5) * window.innerWidth;
-  positions[i * 3 + 1] = (Math.random() - 0.5) * window.innerHeight;
+  positions[i * 3] = (Math.random() - 0.5) * 100;
+  positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
   positions[i * 3 + 2] = 0;
-  velocities[i * 3] = (Math.random() - 0.5) * 1;
-  velocities[i * 3 + 1] = (Math.random() - 0.5) * 1;
+  velocities[i * 3] = (Math.random() - 0.5) * 0.5;
+  velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
   velocities[i * 3 + 2] = 0;
-  sizes[i] = Math.random() * 3 + 1;
+  sizes[i] = Math.random() * 2 + 1;
   ripples[i] = 0;
 }
 
-particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-particles.setAttribute('ripple', new THREE.BufferAttribute(ripples, 1));
+geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+geometry.setAttribute('ripple', new THREE.BufferAttribute(ripples, 1));
 
-const shaderMaterial = new THREE.ShaderMaterial({
+// === マテリアル（Shader） ===
+const material = new THREE.ShaderMaterial({
   uniforms: {
-    pointTexture: { value: new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/circle.png') },
-    uTime: { value: 0.0 }
+    uTime: { value: 0.0 },
+    pointTexture: { value: new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/circle.png') }
   },
   vertexShader: `
     attribute float size;
@@ -51,7 +53,7 @@ const shaderMaterial = new THREE.ShaderMaterial({
       vHue = mod(position.x + position.y, 360.0);
       vRipple = ripple;
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      gl_PointSize = size * (300.0 / -mvPosition.z) * (1.0 + ripple);
+      gl_PointSize = size * (200.0 / -mvPosition.z) * (1.0 + ripple);
       gl_Position = projectionMatrix * mvPosition;
     }
   `,
@@ -70,59 +72,65 @@ const shaderMaterial = new THREE.ShaderMaterial({
   transparent: true
 });
 
-const pointCloud = new THREE.Points(particles, shaderMaterial);
-scene.add(pointCloud);
+const points = new THREE.Points(geometry, material);
+scene.add(points);
 
-const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+// === 接続ライン ===
+const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.2 });
+const maxLines = 1000;
+const linePositions = new Float32Array(maxLines * 6);
 const lineGeometry = new THREE.BufferGeometry();
-const maxConnections = 1500;
-const linePositions = new Float32Array(maxConnections * 3);
 lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
-const linesMesh = new THREE.LineSegments(lineGeometry, lineMaterial);
-scene.add(linesMesh);
+const lineMesh = new THREE.LineSegments(lineGeometry, lineMaterial);
+scene.add(lineMesh);
 
+// === マウス入力 ===
 let mouse = { x: 0, y: 0 };
 window.addEventListener('mousemove', (e) => {
-  mouse.x = e.clientX - window.innerWidth / 2;
-  mouse.y = -(e.clientY - window.innerHeight / 2);
+  mouse.x = (e.clientX / window.innerWidth - 0.5) * 100;
+  mouse.y = -(e.clientY / window.innerHeight - 0.5) * 100;
 });
 
+// === アニメーションループ ===
 function animate() {
-  shaderMaterial.uniforms.uTime.value += 0.01;
-  const pos = particles.attributes.position.array;
-  const ripple = particles.attributes.ripple.array;
+  material.uniforms.uTime.value += 0.01;
+
+  const pos = geometry.attributes.position.array;
+  const ripple = geometry.attributes.ripple.array;
+
   let lineIndex = 0;
-
   for (let i = 0; i < particleCount; i++) {
-    let x = pos[i * 3];
-    let y = pos[i * 3 + 1];
-    let vx = velocities[i * 3];
-    let vy = velocities[i * 3 + 1];
+    let ix = i * 3;
+    pos[ix] += velocities[ix];
+    pos[ix + 1] += velocities[ix + 1];
 
-    x += vx;
-    y += vy;
+    // 画面端でバウンド
+    if (pos[ix] < -50 || pos[ix] > 50) velocities[ix] *= -1;
+    if (pos[ix + 1] < -50 || pos[ix + 1] > 50) velocities[ix + 1] *= -1;
 
-    if (x < -window.innerWidth / 2 || x > window.innerWidth / 2) velocities[i * 3] *= -1;
-    if (y < -window.innerHeight / 2 || y > window.innerHeight / 2) velocities[i * 3 + 1] *= -1;
+    // マウス近接で波動追加
+    let dx = pos[ix] - mouse.x;
+    let dy = pos[ix + 1] - mouse.y;
+    if (Math.sqrt(dx * dx + dy * dy) < 10) ripple[i] = 1.0;
 
-    pos[i * 3] = x;
-    pos[i * 3 + 1] = y;
-
-    ripple[i] *= 0.95;
+    ripple[i] *= 0.96;
 
     for (let j = i + 1; j < particleCount; j++) {
-      let dx = pos[i * 3] - pos[j * 3];
-      let dy = pos[i * 3 + 1] - pos[j * 3 + 1];
+      let jx = j * 3;
+      let dx = pos[ix] - pos[jx];
+      let dy = pos[ix + 1] - pos[jx + 1];
       let dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 100 && lineIndex < maxConnections * 3) {
-        linePositions[lineIndex++] = pos[i * 3];
-        linePositions[lineIndex++] = pos[i * 3 + 1];
-        linePositions[lineIndex++] = pos[i * 3 + 2];
-        linePositions[lineIndex++] = pos[j * 3];
-        linePositions[lineIndex++] = pos[j * 3 + 1];
-        linePositions[lineIndex++] = pos[j * 3 + 2];
+      if (dist < 10 && lineIndex < maxLines * 6) {
+        let li = lineIndex;
+        linePositions[li] = pos[ix];
+        linePositions[li + 1] = pos[ix + 1];
+        linePositions[li + 2] = 0;
+        linePositions[li + 3] = pos[jx];
+        linePositions[li + 4] = pos[jx + 1];
+        linePositions[li + 5] = 0;
+        lineIndex += 6;
 
-        if (dist < 40) {
+        if (dist < 5) {
           ripple[i] = 1.0;
           ripple[j] = 1.0;
         }
@@ -130,13 +138,13 @@ function animate() {
     }
   }
 
-  for (; lineIndex < maxConnections * 3; lineIndex++) {
+  for (; lineIndex < maxLines * 6; lineIndex++) {
     linePositions[lineIndex] = 0;
   }
 
+  geometry.attributes.position.needsUpdate = true;
+  geometry.attributes.ripple.needsUpdate = true;
   lineGeometry.attributes.position.needsUpdate = true;
-  particles.attributes.position.needsUpdate = true;
-  particles.attributes.ripple.needsUpdate = true;
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
