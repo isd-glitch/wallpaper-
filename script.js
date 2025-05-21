@@ -21,19 +21,19 @@ document.addEventListener("mousemove", (e) => {
   mouse.y = e.clientY;
 });
 
-// 物理演算対応 粒子クラス
 class Particle {
-  constructor(x, y, dx, dy, color) {
+  constructor(x, y, dx, dy, hueShift = 0) {
     this.x = x;
     this.y = y;
-    this.radius = Math.random() * 6 + 3;
-    this.color = color;
+    this.radius = Math.random() * 8 + 4;
+    this.color = `hsl(${(hue + hueShift) % 360}, 100%, 70%)`;
     this.opacity = 1;
     this.mass = 1;
     this.velocity = { x: dx, y: dy };
   }
 
   update(particles) {
+    // 衝突反応
     for (let other of particles) {
       if (this === other) continue;
       const dx = other.x - this.x;
@@ -42,30 +42,27 @@ class Particle {
       const minDist = this.radius + other.radius;
 
       if (dist < minDist && dist > 0) {
-        // 弾性衝突: 反発力の簡易実装
         const angle = Math.atan2(dy, dx);
-        const totalMass = this.mass + other.mass;
+        const force = 0.2;
+        const fx = Math.cos(angle) * force;
+        const fy = Math.sin(angle) * force;
 
-        const v1 = this.velocity;
-        const v2 = other.velocity;
-
-        // 単純な反射応答
-        this.velocity.x -= (dx / dist) * 0.2;
-        this.velocity.y -= (dy / dist) * 0.2;
-
-        other.velocity.x += (dx / dist) * 0.2;
-        other.velocity.y += (dy / dist) * 0.2;
+        this.velocity.x -= fx;
+        this.velocity.y -= fy;
+        other.velocity.x += fx;
+        other.velocity.y += fy;
       }
     }
 
     this.x += this.velocity.x;
     this.y += this.velocity.y;
 
-    this.velocity.x *= 0.95;
-    this.velocity.y *= 0.95;
+    // 摩擦と減衰
+    this.velocity.x *= 0.92;
+    this.velocity.y *= 0.92;
 
     this.opacity *= 0.97;
-    this.radius *= 0.98;
+    this.radius *= 0.985;
   }
 
   draw(ctx) {
@@ -73,7 +70,7 @@ class Particle {
     ctx.globalAlpha = this.opacity;
     ctx.fillStyle = this.color;
     ctx.shadowColor = this.color;
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 30;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -82,36 +79,32 @@ class Particle {
 }
 
 function animate() {
-  ctx.fillStyle = "rgba(17, 17, 17, 0.1)";
+  // 背景：光の残像を活かした半透明
+  ctx.fillStyle = "rgba(10, 10, 20, 0.1)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const dx = mouse.x - prevMouse.x;
   const dy = mouse.y - prevMouse.y;
   const speed = Math.sqrt(dx * dx + dy * dy);
   const angle = Math.atan2(dy, dx);
-  const spread = Math.min(speed / 3, 10);
+  const intensity = Math.min(speed / 2, 10);
   hue = (hue + 1) % 360;
 
-  for (let i = 0; i < spread * 2; i++) {
-    const angleOffset = (Math.random() - 0.5) * 0.5;
+  for (let i = 0; i < intensity * 2; i++) {
+    const offsetAngle = (Math.random() - 0.5) * 1.5;
     const velocity = {
-      x: Math.cos(angle + angleOffset) * speed * 0.1,
-      y: Math.sin(angle + angleOffset) * speed * 0.1
+      x: Math.cos(angle + offsetAngle) * speed * 0.1 + (Math.random() - 0.5),
+      y: Math.sin(angle + offsetAngle) * speed * 0.1 + (Math.random() - 0.5)
     };
-    particles.push(new Particle(
-      mouse.x,
-      mouse.y,
-      velocity.x,
-      velocity.y,
-      `hsl(${hue + Math.random() * 30}, 100%, 60%)`
-    ));
+    const shift = Math.random() * 60 - 30;
+    particles.push(new Particle(mouse.x, mouse.y, velocity.x, velocity.y, shift));
   }
 
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.update(particles);
     p.draw(ctx);
-    if (p.opacity < 0.02 || p.radius < 0.5) {
+    if (p.opacity < 0.01 || p.radius < 0.5) {
       particles.splice(i, 1);
     }
   }
