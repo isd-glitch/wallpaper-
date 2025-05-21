@@ -1,4 +1,4 @@
-// WebGL版：高パフォーマンスで美しく滑らかな接続型パーティクルエフェクト + ライン接続 + 波紋 + バウンド + 反射
+// WebGL版：高パフォーマンスで美しく滑らかな接続型パーティクルエフェクト + ライン接続 + 波紋 + バウンド + 反射 + 波動伝播
 import * as THREE from 'https://cdn.skypack.dev/three@0.150.1';
 
 const scene = new THREE.Scene();
@@ -20,6 +20,7 @@ const particles = new THREE.BufferGeometry();
 const positions = new Float32Array(particleCount * 3);
 const velocities = new Float32Array(particleCount * 3);
 const sizes = new Float32Array(particleCount);
+const ripples = new Float32Array(particleCount);
 
 for (let i = 0; i < particleCount; i++) {
   positions[i * 3] = (Math.random() - 0.5) * window.innerWidth;
@@ -29,10 +30,12 @@ for (let i = 0; i < particleCount; i++) {
   velocities[i * 3 + 1] = (Math.random() - 0.5) * 1;
   velocities[i * 3 + 2] = 0;
   sizes[i] = Math.random() * 3 + 1;
+  ripples[i] = 0;
 }
 
 particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+particles.setAttribute('ripple', new THREE.BufferAttribute(ripples, 1));
 
 const shaderMaterial = new THREE.ShaderMaterial({
   uniforms: {
@@ -41,19 +44,24 @@ const shaderMaterial = new THREE.ShaderMaterial({
   },
   vertexShader: `
     attribute float size;
+    attribute float ripple;
     varying float vHue;
+    varying float vRipple;
     void main() {
       vHue = mod(position.x + position.y, 360.0);
+      vRipple = ripple;
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      gl_PointSize = size * (300.0 / -mvPosition.z);
+      gl_PointSize = size * (300.0 / -mvPosition.z) * (1.0 + ripple);
       gl_Position = projectionMatrix * mvPosition;
     }
   `,
   fragmentShader: `
     uniform sampler2D pointTexture;
     varying float vHue;
+    varying float vRipple;
     void main() {
-      vec3 color = vec3(0.5 + 0.5 * cos(vHue * 0.05 + vec3(0.0, 2.0, 4.0)));
+      vec3 baseColor = vec3(0.5 + 0.5 * cos(vHue * 0.05 + vec3(0.0, 2.0, 4.0)));
+      vec3 color = mix(baseColor, vec3(1.0), clamp(vRipple, 0.0, 1.0));
       gl_FragColor = vec4(color, 1.0) * texture2D(pointTexture, gl_PointCoord);
     }
   `,
@@ -65,7 +73,6 @@ const shaderMaterial = new THREE.ShaderMaterial({
 const pointCloud = new THREE.Points(particles, shaderMaterial);
 scene.add(pointCloud);
 
-// 接続ライン
 const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
 const lineGeometry = new THREE.BufferGeometry();
 const maxConnections = 1500;
@@ -83,6 +90,7 @@ window.addEventListener('mousemove', (e) => {
 function animate() {
   shaderMaterial.uniforms.uTime.value += 0.01;
   const pos = particles.attributes.position.array;
+  const ripple = particles.attributes.ripple.array;
   let lineIndex = 0;
 
   for (let i = 0; i < particleCount; i++) {
@@ -100,6 +108,8 @@ function animate() {
     pos[i * 3] = x;
     pos[i * 3 + 1] = y;
 
+    ripple[i] *= 0.95;
+
     for (let j = i + 1; j < particleCount; j++) {
       let dx = pos[i * 3] - pos[j * 3];
       let dy = pos[i * 3 + 1] - pos[j * 3 + 1];
@@ -111,14 +121,22 @@ function animate() {
         linePositions[lineIndex++] = pos[j * 3];
         linePositions[lineIndex++] = pos[j * 3 + 1];
         linePositions[lineIndex++] = pos[j * 3 + 2];
+
+        if (dist < 40) {
+          ripple[i] = 1.0;
+          ripple[j] = 1.0;
+        }
       }
     }
   }
+
   for (; lineIndex < maxConnections * 3; lineIndex++) {
     linePositions[lineIndex] = 0;
   }
+
   lineGeometry.attributes.position.needsUpdate = true;
   particles.attributes.position.needsUpdate = true;
+  particles.attributes.ripple.needsUpdate = true;
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
